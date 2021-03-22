@@ -1,0 +1,83 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "org.jetbrains.kotlin",
+    "module": "backend.native",
+    "version": "1.4.31-dev",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "6.7",
+      "buildId": "6s6hsloov5a2lkp76bgpcmhzua"
+    }
+  },
+  "variants": [
+    {
+      "name": "apiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.localToProject": "public",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "1.4.31-327"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "backend.native-1.4.31-dev.jar",
+          "url": "backend.native-1.4.31-dev.jar",
+          "size": 4031987,
+          "sha512": "a238dd9ef2415f79b8bf8009e1a58eeffb16a343b511f4a58732b8518e3a968f51dd0c83c838d19b919b44516e9d4e177fe05f87340c3230aef43782520765a9",
+          "sha256": "d5ce31da8d259db5d472c77ab3282fedb267636d92b4981c10f867197b379da5",
+          "sha1": "6987fd00e258ea099da903d7f4c4b051345bf911",
+          "md5": "7f27b5a48a611ab68cd27dd2c9065dd3"
+        }
+      ]
+    },
+    {
+      "name": "runtimeElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.jvm.version": 8,
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.localToProject": "public",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "1.4.31-327"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "backend.native-1.4.31-dev.jar",
+          "url": "backend.native-1.4.31-dev.jar",
+          "size": 4031987,
+          "sha512": "a238dd9ef2415f79b8bf8009e1a58eeffb16a343b511f4a58732b8518e3a968f51dd0c83c838d19b919b44516e9d4e177fe05f87340c3230aef43782520765a9",
+          "sha256": "d5ce31da8d259db5d472c77ab3282fedb267636d92b4981c10f867197b379da5",
+          "sha1": "6987fd00e258ea099da903d7f4c4b051345bf911",
+          "md5": "7f27b5a48a611ab68cd27dd2c9065dd3"
+        }
+      ]
+    }
+  ]
+}

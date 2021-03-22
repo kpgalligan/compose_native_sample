@@ -19,20 +19,20 @@ package androidx.compose.compiler.plugins.kotlin
 import androidx.compose.compiler.plugins.kotlin.lower.ClassStabilityFieldSerializationPlugin
 import com.intellij.mock.MockProject
 import com.intellij.openapi.project.Project
+import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
+import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.compiler.plugin.CliOption
 import org.jetbrains.kotlin.compiler.plugin.CliOptionProcessingException
 import org.jetbrains.kotlin.compiler.plugin.CommandLineProcessor
 import org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar
-import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
-import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.config.CompilerConfigurationKey
 import org.jetbrains.kotlin.config.KotlinCompilerVersion
 import org.jetbrains.kotlin.extensions.internal.TypeResolutionInterceptor
-import org.jetbrains.kotlin.serialization.DescriptorSerializer
+import org.jetbrains.kotlin.serialization.DescriptorSerializerPlugin
 
 object ComposeConfiguration {
     val LIVE_LITERALS_ENABLED_KEY =
@@ -43,6 +43,8 @@ object ComposeConfiguration {
         CompilerConfigurationKey<Boolean>("Enable optimization to treat remember as an intrinsic")
     val SUPPRESS_KOTLIN_VERSION_COMPATIBILITY_CHECK =
         CompilerConfigurationKey<Boolean>("Suppress Kotlin version compatibility check")
+    val DECOYS_ENABLED_KEY =
+        CompilerConfigurationKey<Boolean>("Generate decoy methods in IR transform")
 }
 
 class ComposeCommandLineProcessor : CommandLineProcessor {
@@ -76,6 +78,13 @@ class ComposeCommandLineProcessor : CommandLineProcessor {
             required = false,
             allowMultipleOccurrences = false
         )
+        val DECOYS_ENABLED_OPTION = CliOption(
+            "generateDecoys",
+            "<true|false>",
+            "Generate decoy methods in IR transform",
+            required = false,
+            allowMultipleOccurrences = false
+        )
     }
 
     override val pluginId = PLUGIN_ID
@@ -83,31 +92,39 @@ class ComposeCommandLineProcessor : CommandLineProcessor {
         LIVE_LITERALS_ENABLED_OPTION,
         SOURCE_INFORMATION_ENABLED_OPTION,
         INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_OPTION,
-        SUPPRESS_KOTLIN_VERSION_CHECK_ENABLED_OPTION
+        SUPPRESS_KOTLIN_VERSION_CHECK_ENABLED_OPTION,
+        DECOYS_ENABLED_OPTION,
     )
 
     override fun processOption(
         option: AbstractCliOption,
         value: String,
         configuration: CompilerConfiguration
-    ) = when (option) {
-        LIVE_LITERALS_ENABLED_OPTION -> configuration.put(
-            ComposeConfiguration.LIVE_LITERALS_ENABLED_KEY,
-            value == "true"
-        )
-        SOURCE_INFORMATION_ENABLED_OPTION -> configuration.put(
-            ComposeConfiguration.SOURCE_INFORMATION_ENABLED_KEY,
-            value == "true"
-        )
-        INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_OPTION -> configuration.put(
-            ComposeConfiguration.INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_KEY,
-            value == "true"
-        )
-        SUPPRESS_KOTLIN_VERSION_CHECK_ENABLED_OPTION -> configuration.put(
-            ComposeConfiguration.SUPPRESS_KOTLIN_VERSION_COMPATIBILITY_CHECK,
-            value == "true"
-        )
-        else -> throw CliOptionProcessingException("Unknown option: ${option.optionName}")
+    ) {
+//        throw IllegalStateException("arstarst")
+        return when (option) {
+            LIVE_LITERALS_ENABLED_OPTION -> configuration.put(
+                ComposeConfiguration.LIVE_LITERALS_ENABLED_KEY,
+                value == "true"
+            )
+            SOURCE_INFORMATION_ENABLED_OPTION -> configuration.put(
+                ComposeConfiguration.SOURCE_INFORMATION_ENABLED_KEY,
+                value == "true"
+            )
+            INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_OPTION -> configuration.put(
+                ComposeConfiguration.INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_KEY,
+                value == "true"
+            )
+            SUPPRESS_KOTLIN_VERSION_CHECK_ENABLED_OPTION -> configuration.put(
+                ComposeConfiguration.SUPPRESS_KOTLIN_VERSION_COMPATIBILITY_CHECK,
+                value == "true"
+            )
+            DECOYS_ENABLED_OPTION -> configuration.put(
+                ComposeConfiguration.DECOYS_ENABLED_KEY,
+                value == "true"
+            )
+            else -> throw CliOptionProcessingException("Unknown option: ${option.optionName}")
+        }
     }
 }
 
@@ -129,11 +146,11 @@ class ComposeComponentRegistrar : ComponentRegistrar {
             project: Project,
             configuration: CompilerConfiguration
         ) {
-            val KOTLIN_VERSION_EXPECTATION = "1.4.21"
+            val KOTLIN_VERSION_EXPECTATION = "1.4.31"
             KotlinCompilerVersion.getVersion()?.let { version ->
                 val suppressKotlinVersionCheck = configuration.get(
                     ComposeConfiguration.SUPPRESS_KOTLIN_VERSION_COMPATIBILITY_CHECK,
-                    false
+                    true
                 )
                 if (!suppressKotlinVersionCheck && version != KOTLIN_VERSION_EXPECTATION) {
                     val msgCollector = configuration.get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
@@ -146,6 +163,11 @@ class ComposeComponentRegistrar : ComponentRegistrar {
                             " `suppressKotlinVersionCompatibilityCheck` but don't say I didn't" +
                             " warn you!)."
                     )
+
+                    // Return without registering the Compose plugin because the registration
+                    // APIs may have changed and thus throw an exception during registration,
+                    // preventing the diagnostic from being emitted.
+                    return
                 }
             }
 
@@ -161,6 +183,11 @@ class ComposeComponentRegistrar : ComponentRegistrar {
                 ComposeConfiguration.INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_KEY,
                 false
             )
+            val decoysEnabled = configuration.get(
+                ComposeConfiguration.DECOYS_ENABLED_KEY,
+                true
+            )
+
             StorageComponentContainerContributor.registerExtension(
                 project,
                 ComposableCallChecker()
@@ -183,10 +210,12 @@ class ComposeComponentRegistrar : ComponentRegistrar {
                 ComposeIrGenerationExtension(
                     liveLiteralsEnabled = liveLiteralsEnabled,
                     sourceInformationEnabled = sourceInformationEnabled,
-                    intrinsicRememberEnabled = intrinsicRememberEnabled
+                    intrinsicRememberEnabled = intrinsicRememberEnabled,
+                    decoysEnabled = decoysEnabled,
                 )
             )
-            DescriptorSerializer.registerSerializerPlugin(
+            DescriptorSerializerPlugin.registerExtension(
+                project,
                 ClassStabilityFieldSerializationPlugin()
             )
         }

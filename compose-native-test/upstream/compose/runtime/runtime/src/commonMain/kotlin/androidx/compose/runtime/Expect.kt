@@ -26,10 +26,23 @@ internal expect open class ThreadLocal<T>(initialValue: () -> T) {
 
 internal fun <T> ThreadLocal() = ThreadLocal<T?> { null }
 
-expect class WeakHashMap<K, V>() : MutableMap<K, V>
+/**
+ * This is similar to a [ThreadLocal] but has lower overhead because it avoids a weak reference.
+ * This should only be used when the writes are delimited by a try...finally call that will clean
+ * up the reference such as [androidx.compose.runtime.snapshots.Snapshot.enter] else the reference
+ * could get pinned by the thread local causing a leak.
+ *
+ * [ThreadLocal] can be used to implement the actual for platforms that do not exhibit the same
+ * overhead for thread locals as the JVM and ART.
+ */
+internal expect class SnapshotThreadLocal<T>() {
+    fun get(): T?
+    fun set(value: T?)
+}
 
 internal expect fun identityHashCode(instance: Any?): Int
 
+@PublishedApi
 internal expect inline fun <R> synchronized(lock: Any, block: () -> R): R
 
 expect class AtomicReference<V>(value: V) {
@@ -38,14 +51,6 @@ expect class AtomicReference<V>(value: V) {
     fun getAndSet(value: V): V
     fun compareAndSet(expect: V, newValue: V): Boolean
 }
-
-@MustBeDocumented
-@Retention(AnnotationRetention.BINARY)
-@Target(
-    AnnotationTarget.FUNCTION,
-    AnnotationTarget.CONSTRUCTOR
-)
-expect annotation class MainThread()
 
 @MustBeDocumented
 @Retention(AnnotationRetention.SOURCE)
@@ -67,3 +72,13 @@ expect annotation class TestOnly()
 expect annotation class CheckResult(
     val suggest: String
 )
+
+/**
+ * The [MonotonicFrameClock] used by [withFrameNanos] and [withFrameMillis] if one is not present
+ * in the calling [kotlin.coroutines.CoroutineContext].
+ */
+// Implementor's note:
+// This frame clock implementation should try to synchronize with the vsync rate of the device's
+// default display. Without this synchronization, any usage of this default clock will result
+// in inconsistent animation frame timing and associated visual artifacts.
+expect val DefaultMonotonicFrameClock: MonotonicFrameClock

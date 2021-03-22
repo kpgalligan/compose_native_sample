@@ -9,4 +9,5 @@ sourceSets {
 
 dependencies {
   compileOnly deps.kotlin.compiler
+  compileOnly "org.jetbrains.kotlin:backend.native:1.4.31-dev"
 }

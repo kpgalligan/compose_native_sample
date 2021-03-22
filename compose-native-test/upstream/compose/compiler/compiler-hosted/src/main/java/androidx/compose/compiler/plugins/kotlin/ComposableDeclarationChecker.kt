@@ -16,6 +16,7 @@
 
 package androidx.compose.compiler.plugins.kotlin
 
+import androidx.compose.compiler.plugins.kotlin.ComposeErrors.COMPOSABLE_FUN_MAIN
 import androidx.compose.compiler.plugins.kotlin.ComposeErrors.COMPOSABLE_PROPERTY_BACKING_FIELD
 import androidx.compose.compiler.plugins.kotlin.ComposeErrors.COMPOSABLE_SUSPEND_FUN
 import androidx.compose.compiler.plugins.kotlin.ComposeErrors.COMPOSABLE_VAR
@@ -29,8 +30,11 @@ import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyAccessorDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
+import org.jetbrains.kotlin.idea.MainFunctionDetector
 import org.jetbrains.kotlin.platform.TargetPlatform
+import org.jetbrains.kotlin.platform.js.isJs
 import org.jetbrains.kotlin.platform.jvm.isJvm
+import org.jetbrains.kotlin.platform.konan.isNative
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtProperty
@@ -45,8 +49,13 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
         platform: TargetPlatform,
         moduleDescriptor: ModuleDescriptor
     ) {
-        if (!platform.isJvm()) return
-        container.useInstance(this)
+        if (platform.isNative()) {
+            container.useInstance(this)
+        }
+        if (platform.isJvm() || platform.isJs()) {
+//            container.useInstance(this)
+            throw IllegalStateException("Only Native")
+        }
     }
 
     override fun check(
@@ -55,8 +64,7 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
         context: DeclarationCheckerContext
     ) {
         when {
-            COMPOSABLE_PROPERTIES &&
-                declaration is KtProperty &&
+            declaration is KtProperty &&
                 descriptor is PropertyDescriptor -> checkProperty(declaration, descriptor, context)
             declaration is KtPropertyAccessor &&
                 descriptor is PropertyAccessorDescriptor -> checkPropertyAccessor(
@@ -101,6 +109,19 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
                 }
             }
         }
+        // NOTE: only use the MainFunctionDetector if the descriptor name is main, to avoid
+        // unnecessarily allocating this class
+        if (hasComposableAnnotation &&
+            descriptor.name.asString() == "main" &&
+            MainFunctionDetector(
+                    context.trace.bindingContext,
+                    context.languageVersionSettings
+                ).isMain(descriptor)
+        ) {
+            context.trace.report(
+                COMPOSABLE_FUN_MAIN.on(declaration.nameIdentifier ?: declaration)
+            )
+        }
     }
 
     private fun checkType(
@@ -120,15 +141,14 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
         descriptor: PropertyDescriptor,
         context: DeclarationCheckerContext
     ) {
-        val hasComposableAnnotation = descriptor.hasComposableAnnotation()
-        val thisIsComposable = hasComposableAnnotation || descriptor
+        val hasComposableAnnotation = descriptor
             .getter
             ?.hasComposableAnnotation() == true
         if (descriptor.overriddenDescriptors.isNotEmpty()) {
             val override = descriptor.overriddenDescriptors.first()
             val overrideIsComposable = override.hasComposableAnnotation() ||
                 override.getter?.hasComposableAnnotation() == true
-            if (overrideIsComposable != thisIsComposable) {
+            if (overrideIsComposable != hasComposableAnnotation) {
                 context.trace.report(
                     ComposeErrors.CONFLICTING_OVERLOADS.on(
                         declaration,
@@ -136,13 +156,6 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
                     )
                 )
             }
-        }
-        if (hasComposableAnnotation) {
-            context.trace.report(
-                ComposeErrors.DEPRECATED_COMPOSABLE_PROPERTY.on(
-                    declaration.nameIdentifier ?: declaration
-                )
-            )
         }
         if (!hasComposableAnnotation) return
         val initializer = declaration.initializer
@@ -165,14 +178,10 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
         val name = propertyPsi.nameIdentifier
         val initializer = propertyPsi.initializer
         val hasComposableAnnotation = descriptor.hasComposableAnnotation()
-        val propertyHasComposableAnnotation = COMPOSABLE_PROPERTIES && propertyDescriptor
-            .hasComposableAnnotation()
-        val thisComposable = hasComposableAnnotation || propertyHasComposableAnnotation
         if (descriptor.overriddenDescriptors.isNotEmpty()) {
             val override = descriptor.overriddenDescriptors.first()
-            val overrideComposable = override.hasComposableAnnotation() || override
-                .correspondingProperty.hasComposableAnnotation()
-            if (overrideComposable != thisComposable) {
+            val overrideComposable = override.hasComposableAnnotation()
+            if (overrideComposable != hasComposableAnnotation) {
                 context.trace.report(
                     ComposeErrors.CONFLICTING_OVERLOADS.on(
                         declaration,

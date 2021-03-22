@@ -21,12 +21,14 @@ import androidx.compose.compiler.plugins.kotlin.analysis.ComposeWritableSlices
 import androidx.compose.compiler.plugins.kotlin.hasComposableAnnotation
 import androidx.compose.compiler.plugins.kotlin.irTrace
 import androidx.compose.compiler.plugins.kotlin.isComposableCallable
+import androidx.compose.compiler.plugins.kotlin.lower.decoys.isDecoy
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.jvm.ir.isInlineParameter
 import org.jetbrains.kotlin.backend.jvm.lower.inlineclasses.InlineClassAbi
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.descriptors.ModuleDescriptor
 import org.jetbrains.kotlin.descriptors.PropertyGetterDescriptor
 import org.jetbrains.kotlin.descriptors.PropertySetterDescriptor
 import org.jetbrains.kotlin.descriptors.SourceElement
@@ -34,6 +36,7 @@ import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI
 import org.jetbrains.kotlin.ir.UNDEFINED_OFFSET
 import org.jetbrains.kotlin.ir.builders.declarations.addValueParameter
+import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.IrOverridableDeclaration
@@ -41,7 +44,6 @@ import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrValueParameter
 import org.jetbrains.kotlin.ir.declarations.copyAttributes
 import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
-import org.jetbrains.kotlin.ir.declarations.impl.IrValueParameterImpl
 import org.jetbrains.kotlin.ir.descriptors.WrappedFunctionDescriptorWithContainerSource
 import org.jetbrains.kotlin.ir.descriptors.WrappedPropertyGetterDescriptor
 import org.jetbrains.kotlin.ir.descriptors.WrappedPropertySetterDescriptor
@@ -54,13 +56,13 @@ import org.jetbrains.kotlin.ir.expressions.IrReturn
 import org.jetbrains.kotlin.ir.expressions.IrStatementOrigin
 import org.jetbrains.kotlin.ir.expressions.copyTypeArgumentsFrom
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
+import org.jetbrains.kotlin.ir.expressions.impl.IrCompositeImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstructorCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrGetValueImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrReturnImpl
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.symbols.impl.IrSimpleFunctionSymbolImpl
-import org.jetbrains.kotlin.ir.symbols.impl.IrValueParameterSymbolImpl
 import org.jetbrains.kotlin.ir.types.IrSimpleType
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classOrNull
@@ -69,9 +71,9 @@ import org.jetbrains.kotlin.ir.types.isPrimitiveType
 import org.jetbrains.kotlin.ir.types.makeNullable
 import org.jetbrains.kotlin.ir.util.DeepCopySymbolRemapper
 import org.jetbrains.kotlin.ir.util.constructors
-import org.jetbrains.kotlin.ir.util.deepCopyWithSymbols
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.ir.util.explicitParameters
+import org.jetbrains.kotlin.ir.util.fileOrNull
 import org.jetbrains.kotlin.ir.util.findAnnotation
 import org.jetbrains.kotlin.ir.util.functions
 import org.jetbrains.kotlin.ir.util.isFakeOverride
@@ -82,7 +84,6 @@ import org.jetbrains.kotlin.ir.visitors.acceptVoid
 import org.jetbrains.kotlin.ir.visitors.transformChildrenVoid
 import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
 import org.jetbrains.kotlin.load.java.JvmAbi
-import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.resolve.BindingTrace
 import org.jetbrains.kotlin.resolve.DescriptorUtils
@@ -95,13 +96,22 @@ import kotlin.math.min
 class ComposerParamTransformer(
     context: IrPluginContext,
     symbolRemapper: DeepCopySymbolRemapper,
-    bindingTrace: BindingTrace
+    bindingTrace: BindingTrace,
+    private val decoysEnabled: Boolean,
 ) :
     AbstractComposeLowering(context, symbolRemapper, bindingTrace),
     ModuleLoweringPass {
 
+    /**
+     * Used to identify module fragment in case of incremental compilation
+     * see [externallyTransformed]
+     */
+    private var currentModule: IrModuleFragment? = null
+
     @OptIn(ObsoleteDescriptorBasedAPI::class)
     override fun lower(module: IrModuleFragment) {
+        currentModule = module
+
         module.transformChildrenVoid(this)
 
         module.acceptVoid(symbolRemapper)
@@ -154,10 +164,16 @@ class ComposerParamTransformer(
             }
             else -> (symbol.owner).withComposerParamIfNeeded()
         }
-        if (!isComposableLambda && !transformedFunctionSet.contains(ownerFn))
-            return this
-        if (symbol.owner == ownerFn)
-            return this
+
+        // externally transformed functions are already remapped from decoys, so we only need to
+        // add the parameters to the call
+        if (!ownerFn.externallyTransformed()) {
+            if (!isComposableLambda && !transformedFunctionSet.contains(ownerFn))
+                return this
+            if (symbol.owner == ownerFn)
+                return this
+        }
+
         return IrCallImpl(
             startOffset,
             endOffset,
@@ -231,7 +247,15 @@ class ComposerParamTransformer(
 
     private fun defaultArgumentFor(param: IrValueParameter): IrExpression? {
         if (param.varargElementType != null) return null
-        return param.type.defaultValue()
+        return param.type.defaultValue().let {
+            IrCompositeImpl(
+                it.startOffset,
+                it.endOffset,
+                it.type,
+                IrStatementOrigin.DEFAULT_VALUE,
+                listOf(it)
+            )
+        }
     }
 
     // TODO(lmr): There is an equivalent function in IrUtils, but we can't use it because it
@@ -274,6 +298,14 @@ class ComposerParamTransformer(
         // call this with a function that has the synthetic composer parameter, we don't want to
         // transform it further).
         if (transformedFunctionSet.contains(this)) return this
+
+        // if it is a decoy, no need to process
+        if (isDecoy()) return this
+
+        // some functions were transformed during previous compilations or in other modules
+        if (this.externallyTransformed()) {
+            return this
+        }
 
         // if not a composable fn, nothing we need to do
         if (!descriptor.isComposableCallable(context.bindingContext)) {
@@ -387,19 +419,8 @@ class ComposerParamTransformer(
             }
             fn.annotations = annotations.map { a -> a }
             fn.metadata = metadata
-            fn.body = body?.deepCopyWithSymbols(this)
+            fn.body = body
         }
-    }
-
-    private fun dexSafeName(name: Name): Name {
-        return if (name.isSpecial && name.asString().contains(' ')) {
-            val sanitized = name
-                .asString()
-                .replace(' ', '$')
-                .replace('<', '$')
-                .replace('>', '$')
-            Name.identifier(sanitized)
-        } else name
     }
 
     private fun jvmNameAnnotation(name: String): IrConstructorCall {
@@ -486,20 +507,7 @@ class ComposerParamTransformer(
 
             fn.valueParameters = fn.valueParameters.map { param ->
                 val newType = defaultParameterType(param)
-                IrValueParameterImpl(
-                    param.startOffset,
-                    param.endOffset,
-                    param.origin,
-                    IrValueParameterSymbolImpl(param.descriptor),
-                    param.name,
-                    index = param.index,
-                    type = newType, varargElementType = param.varargElementType,
-                    isCrossinline = param.isCrossinline,
-                    isNoinline = param.isNoinline
-                ).also {
-                    it.defaultValue = param.defaultValue
-                    it.parent = param.parent
-                }
+                param.copyTo(fn, type = newType, isAssignable = param.defaultValue != null)
             }
 
             val valueParametersMapping = explicitParameters
@@ -509,10 +517,12 @@ class ComposerParamTransformer(
             val realParams = fn.valueParameters.size
 
             // $composer
-            val composerParam = fn.addValueParameter(
-                KtxNameConventions.COMPOSER_PARAMETER.identifier,
-                composerType.makeNullable()
-            )
+            val composerParam = fn.addValueParameter {
+                name = KtxNameConventions.COMPOSER_PARAMETER
+                type = composerType.makeNullable()
+                origin = IrDeclarationOrigin.DEFINED
+                isAssignable = true
+            }
 
             // $changed[n]
             val changed = KtxNameConventions.CHANGED_PARAMETER.identifier
@@ -529,7 +539,8 @@ class ComposerParamTransformer(
                 for (i in 0 until defaultParamCount(realParams)) {
                     fn.addValueParameter(
                         if (i == 0) defaults else "$defaults$i",
-                        context.irBuiltIns.intType
+                        context.irBuiltIns.intType,
+                        IrDeclarationOrigin.MASK_FOR_DEFAULT_FUNCTION
                     )
                 }
             }
@@ -625,4 +636,18 @@ class ComposerParamTransformer(
         }
         return false
     }
+
+    /**
+     * With klibs, composable functions are always deserialized from IR instead of being restored
+     * into stubs.
+     * In this case, we need to avoid transforming those functions twice (because synthetic
+     * parameters are being added). We know however, that all the other modules were compiled
+     * before, so if the function comes from other [IrModuleFragment], we must skip it.
+     *
+     * NOTE: [ModuleDescriptor] will not work here, as incremental compilation of the same module
+     * can contain some functions that were transformed during previous compilation in a
+     * different module fragment with the same [ModuleDescriptor]
+     */
+    private fun IrFunction.externallyTransformed(): Boolean =
+        decoysEnabled && currentModule?.files?.contains(fileOrNull) != true
 }

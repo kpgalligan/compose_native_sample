@@ -3,16 +3,13 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPluginKt
 apply plugin: 'org.jetbrains.kotlin.multiplatform'
 
 kotlin {
-  ios()
+  macosX64()
 
   sourceSets {
     commonMain {
       kotlin {
         srcDir '../upstream/compose/runtime/runtime/src/commonMain/kotlin'
-        srcDir '../upstream/compose/runtime/runtime-dispatch/src/commonMain/kotlin'
-
-        // Uses synchronized() which does not exist in native stdlib.
-        exclude 'androidx/compose/runtime/dispatch/Expect.kt'
+        srcDir '../upstream/compose/runtime/runtime/src/macosX64Main/kotlin'
       }
       dependencies {
         api deps.kotlinx.coroutines.core
@@ -23,5 +20,9 @@ kotlin {
 }
 
 dependencies {
-  add(KotlinPluginKt.NATIVE_COMPILER_PLUGIN_CLASSPATH_CONFIGURATION_NAME, project(':compiler-native'))
+  // For some reason with the following, we get class not found for 'com/android/build/gradle/api/BaseVariant'.
+  // I suspect KotlinPluginKt drags in some Android stuff, but I don't know what to do about it, so for now just
+  // hard code 'kotlinNativeCompilerPluginClasspath'
+//  add(KotlinPluginKt.NATIVE_COMPILER_PLUGIN_CLASSPATH_CONFIGURATION_NAME, project(':compiler-native'))
+  add("kotlinNativeCompilerPluginClasspath", project(':compiler-native'))
 }

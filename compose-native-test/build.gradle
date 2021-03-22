@@ -2,11 +2,11 @@ import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
 
 buildscript {
   ext.versions = [
-    'kotlin': '1.4.21',
+    'kotlin': '1.4.31',
     'kotlinx': [
-      'coroutines': '1.4.1',
+      'coroutines': '1.4.1-native-mt',
     ],
-    'compose': '1.0.0-alpha09',
+    'compose': '1.0.0-beta02',
   ]
 
   ext.deps = [
@@ -23,7 +23,6 @@ buildscript {
 
   dependencies {
     classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${versions.kotlin}"
-    classpath 'com.android.tools.build:gradle:4.0.2'
   }
   repositories {
     mavenCentral()
@@ -38,6 +37,9 @@ subprojects {
     google()
     maven {
       url 'https://kotlin.bintray.com/kotlinx'
+    }
+    maven {
+      url uri("${projectDir}/../../prebuilt-repo")
     }
     jcenter()
   }
