@@ -1,0 +1,4 @@
+rootProject.name = 'compose-native-test'
+
+include ':runtime'
+include ':compiler-native'

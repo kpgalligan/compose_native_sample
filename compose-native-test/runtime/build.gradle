@@ -1,0 +1,27 @@
+import org.jetbrains.kotlin.gradle.plugin.KotlinPluginKt
+
+apply plugin: 'org.jetbrains.kotlin.multiplatform'
+
+kotlin {
+  ios()
+
+  sourceSets {
+    commonMain {
+      kotlin {
+        srcDir '../upstream/compose/runtime/runtime/src/commonMain/kotlin'
+        srcDir '../upstream/compose/runtime/runtime-dispatch/src/commonMain/kotlin'
+
+        // Uses synchronized() which does not exist in native stdlib.
+        exclude 'androidx/compose/runtime/dispatch/Expect.kt'
+      }
+      dependencies {
+        api deps.kotlinx.coroutines.core
+        api 'org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.3'
+      }
+    }
+  }
+}
+
+dependencies {
+  add(KotlinPluginKt.NATIVE_COMPILER_PLUGIN_CLASSPATH_CONFIGURATION_NAME, project(':compiler-native'))
+}

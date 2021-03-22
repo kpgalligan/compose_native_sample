@@ -1,0 +1,73 @@
+import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
+
+buildscript {
+  ext.versions = [
+    'kotlin': '1.4.21',
+    'kotlinx': [
+      'coroutines': '1.4.1',
+    ],
+    'compose': '1.0.0-alpha09',
+  ]
+
+  ext.deps = [
+    'composeCompiler': "androidx.compose.compiler:compiler:${versions.compose}",
+    'kotlin': [
+      'compiler': "org.jetbrains.kotlin:kotlin-compiler:${versions.kotlin}",
+    ],
+    'kotlinx': [
+      'coroutines': [
+        'core': "org.jetbrains.kotlinx:kotlinx-coroutines-core:${versions.kotlinx.coroutines}",
+      ],
+    ],
+  ]
+
+  dependencies {
+    classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${versions.kotlin}"
+    classpath 'com.android.tools.build:gradle:4.0.2'
+  }
+  repositories {
+    mavenCentral()
+    google()
+    jcenter()
+  }
+}
+
+subprojects {
+  repositories {
+    mavenCentral()
+    google()
+    maven {
+      url 'https://kotlin.bintray.com/kotlinx'
+    }
+    jcenter()
+  }
+
+  plugins.withId('org.jetbrains.kotlin.multiplatform') {
+    kotlin.sourceSets.all {
+      languageSettings {
+        useExperimentalAnnotation('kotlin.RequiresOptIn')
+        useExperimentalAnnotation('androidx.compose.runtime.ExperimentalComposeApi')
+      }
+    }
+  }
+
+  tasks.withType(org.jetbrains.kotlin.gradle.dsl.KotlinJvmCompile).configureEach { task ->
+    task.kotlinOptions {
+      jvmTarget = '1.8'
+      useIR = true
+      freeCompilerArgs += [
+        '-Xopt-in=kotlin.RequiresOptIn',
+        '-Xopt-in=androidx.compose.runtime.ExperimentalComposeApi',
+      ]
+    }
+  }
+
+  // Kotlin/Native compiler reports its version like 1.4.21-344 whereas Kotlin/JVM and Kotlin/JS say
+  // only 1.4.21. The Compose compiler checks this version and fails for the Kotlin/Native variant.
+  tasks.withType(org.jetbrains.kotlin.gradle.tasks.AbstractKotlinNativeCompile).configureEach {
+    it.compilerPluginOptions.addPluginArgument(
+      'androidx.compose.compiler.plugins.kotlin',
+      new SubpluginOption('suppressKotlinVersionCompatibilityCheck', 'true')
+    )
+  }
+}
