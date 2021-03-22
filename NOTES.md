@@ -8,3 +8,7 @@ https://youtrack.jetbrains.com/issue/KT-44381
 
 Updating to latest compose code and JS PS's
 
+## jw_KT44381_baseline notes
+
+This branch is the one from the zip file attached to the issue above. Building on top of this.
+
