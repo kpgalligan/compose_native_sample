@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Android Open Source Project
+ * Copyright 2019 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,14 @@
 
 package androidx.compose.runtime
 
-import androidx.compose.runtime.snapshots.SnapshotMutableState
+// todo: trace?
+internal actual object Trace {
+    actual fun beginSection(name: String): Any? {
+        return null
+    }
 
-/**
- * Returns platform specific implementation based on [SnapshotMutableStateImpl].
- */
-internal actual fun <T> createSnapshotMutableState(
-    value: T,
-    policy: SnapshotMutationPolicy<T>
-): SnapshotMutableState<T> = SnapshotMutableStateImpl(value, policy)
+    actual fun endSection(token: Any?) {
+    }
+}
+
+actual annotation class CheckResult actual constructor(actual val suggest: String)

@@ -17,9 +17,6 @@
 @file:OptIn(InternalComposeApi::class)
 package androidx.compose.runtime
 
-import androidx.compose.runtime.snapshots.fastFilterIndexed
-import androidx.compose.runtime.snapshots.fastForEach
-import androidx.compose.runtime.snapshots.fastMap
 import androidx.compose.runtime.tooling.CompositionData
 import kotlin.math.max
 import kotlin.math.min
@@ -332,7 +329,7 @@ internal class SlotTable : CompositionData, Iterable<CompositionGroup> {
 
         // Verify anchors are well-formed
         var lastLocation = -1
-        anchors.fastForEach { anchor ->
+        for (anchor in anchors) {
             val location = anchor.toIndexFor(this)
             require(location in 0..groupsSize) { "Location out of bound" }
             require(lastLocation < location) { "Anchor is out of order" }
@@ -2213,7 +2210,7 @@ internal class SlotWriter(
 
         // Insert the anchors into there new location
         val moveDelta = newLocation - originalLocation
-        removedAnchors.fastForEach { anchor ->
+        for (anchor in removedAnchors) {
             val anchorIndex = anchorIndex(anchor)
             val newAnchorIndex = anchorIndex + moveDelta
             if (newAnchorIndex >= groupGapStart) {
@@ -2351,10 +2348,10 @@ internal class SlotWriter(
     private fun IntArray.dataIndexes() = groups.dataAnchors().let {
         it.slice(0 until groupGapStart) +
             it.slice(groupGapStart + groupGapLen until (size / Group_Fields_Size))
-    }.fastMap { anchor -> dataAnchorToDataIndex(anchor, slotsGapLen, slots.size) }
+    }.map { anchor -> dataAnchorToDataIndex(anchor, slotsGapLen, slots.size) }
 
     @Suppress("unused")
-    private fun keys() = groups.keys().fastFilterIndexed { index, _ ->
+    private fun keys() = groups.keys().filterIndexed { index, _ ->
         index < groupGapStart || index >= groupGapStart + groupGapLen
     }
 
@@ -2546,7 +2543,7 @@ private fun IntArray.updateNodeCount(address: Int, value: Int) {
 }
 private fun IntArray.nodeCounts(len: Int = size) =
     slice(GroupInfo_Offset until len step Group_Fields_Size)
-        .fastMap { it and NodeCount_Mask }
+        .map { it and NodeCount_Mask }
 
 // Parent anchor
 private fun IntArray.parentAnchor(address: Int) =

@@ -63,7 +63,7 @@ import kotlin.reflect.KProperty
 fun <T> mutableStateOf(
     value: T,
     policy: SnapshotMutationPolicy<T> = structuralEqualityPolicy()
-): MutableState<T> = createSnapshotMutableState(value, policy)
+): MutableState<T> = SnapshotMutableStateImpl(value, policy)
 
 /**
  * A value holder where reads to the [value] property during the execution of a [Composable]
@@ -113,25 +113,17 @@ inline operator fun <T> MutableState<T>.setValue(thisObj: Any?, property: KPrope
 }
 
 /**
- * Returns platform specific implementation based on [SnapshotMutableStateImpl].
- */
-internal expect fun <T> createSnapshotMutableState(
-    value: T,
-    policy: SnapshotMutationPolicy<T>
-): SnapshotMutableState<T>
-
-/**
  * A single value holder whose reads and writes are observed by Compose.
  *
  * Additionally, writes to it are transacted as part of the [Snapshot] system.
  *
- * @param value the wrapped value
- * @param policy a policy to control how changes are handled in a mutable snapshot.
+ * @property value the wrapped value
+ * @property policy a policy to control how changes are handled in a mutable snapshot.
  *
  * @see mutableStateOf
  * @see SnapshotMutationPolicy
  */
-internal open class SnapshotMutableStateImpl<T>(
+private class SnapshotMutableStateImpl<T>(
     value: T,
     override val policy: SnapshotMutationPolicy<T>
 ) : StateObject, SnapshotMutableState<T> {
@@ -251,8 +243,6 @@ fun <T> referentialEqualityPolicy(): SnapshotMutationPolicy<T> =
 
 private object ReferentialEqualityPolicy : SnapshotMutationPolicy<Any?> {
     override fun equivalent(a: Any?, b: Any?) = a === b
-
-    override fun toString() = "ReferentialEqualityPolicy"
 }
 
 /**
@@ -268,8 +258,6 @@ fun <T> structuralEqualityPolicy(): SnapshotMutationPolicy<T> =
 
 private object StructuralEqualityPolicy : SnapshotMutationPolicy<Any?> {
     override fun equivalent(a: Any?, b: Any?) = a == b
-
-    override fun toString() = "StructuralEqualityPolicy"
 }
 
 /**
@@ -285,8 +273,6 @@ fun <T> neverEqualPolicy(): SnapshotMutationPolicy<T> =
 
 private object NeverEqualPolicy : SnapshotMutationPolicy<Any?> {
     override fun equivalent(a: Any?, b: Any?) = false
-
-    override fun toString() = "NeverEqualPolicy"
 }
 
 /**

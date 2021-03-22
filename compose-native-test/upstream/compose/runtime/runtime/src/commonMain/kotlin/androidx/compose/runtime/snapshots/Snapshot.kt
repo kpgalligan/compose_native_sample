@@ -20,7 +20,7 @@ package androidx.compose.runtime.snapshots
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.InternalComposeApi
-import androidx.compose.runtime.SnapshotThreadLocal
+import androidx.compose.runtime.ThreadLocal
 import androidx.compose.runtime.synchronized
 
 /**
@@ -588,7 +588,7 @@ open class MutableSnapshot internal constructor(
                 takeNewGlobalSnapshot(previousGlobalSnapshot, emptyLambda)
                 val globalModified = previousGlobalSnapshot.modified
                 if (globalModified != null && globalModified.isNotEmpty())
-                    applyObservers.toMutableList() to globalModified
+                    applyObservers.toList() to globalModified
                 else
                     emptyList<(Set<Any>, Snapshot) -> Unit>() to null
             } else {
@@ -609,7 +609,7 @@ open class MutableSnapshot internal constructor(
                 this.modified = null
                 previousGlobalSnapshot.modified = null
 
-                applyObservers.toMutableList() to globalModified
+                applyObservers.toList() to globalModified
             }
         }
 
@@ -1129,7 +1129,7 @@ internal class GlobalSnapshot(id: Int, invalid: SnapshotIdSet) :
                 } else null
                 )?.let {
                 it.firstOrNull() ?: { state: Any ->
-                    it.fastForEach { it(state) }
+                    it.forEach { it(state) }
                 }
             }
         }
@@ -1355,10 +1355,7 @@ private fun mergedWriteObserver(
  */
 private const val INVALID_SNAPSHOT = 0
 
-/**
- * Current thread snapshot
- */
-private val threadSnapshot = SnapshotThreadLocal<Snapshot>()
+private val threadSnapshot = ThreadLocal<Snapshot>()
 
 // A global synchronization object. This synchronization object should be taken before modifying any
 // of the fields below.
@@ -1429,7 +1426,7 @@ private fun <T> advanceGlobalSnapshot(block: (invalid: SnapshotIdSet) -> T): T {
     // observers.
     val modified = previousGlobalSnapshot.modified
     if (modified != null) {
-        val observers: List<(Set<Any>, Snapshot) -> Unit> = sync { applyObservers.toMutableList() }
+        val observers = sync { applyObservers.toList() }
         observers.fastForEach { observer ->
             observer(modified, previousGlobalSnapshot)
         }

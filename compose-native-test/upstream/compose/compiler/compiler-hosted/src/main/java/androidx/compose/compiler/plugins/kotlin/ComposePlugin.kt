@@ -19,14 +19,14 @@ package androidx.compose.compiler.plugins.kotlin
 import androidx.compose.compiler.plugins.kotlin.lower.ClassStabilityFieldSerializationPlugin
 import com.intellij.mock.MockProject
 import com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
-import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.compiler.plugin.CliOption
 import org.jetbrains.kotlin.compiler.plugin.CliOptionProcessingException
 import org.jetbrains.kotlin.compiler.plugin.CommandLineProcessor
 import org.jetbrains.kotlin.compiler.plugin.ComponentRegistrar
+import org.jetbrains.kotlin.compiler.plugin.AbstractCliOption
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
+import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.config.CompilerConfigurationKey
@@ -43,8 +43,6 @@ object ComposeConfiguration {
         CompilerConfigurationKey<Boolean>("Enable optimization to treat remember as an intrinsic")
     val SUPPRESS_KOTLIN_VERSION_COMPATIBILITY_CHECK =
         CompilerConfigurationKey<Boolean>("Suppress Kotlin version compatibility check")
-    val DECOYS_ENABLED_KEY =
-        CompilerConfigurationKey<Boolean>("Generate decoy methods in IR transform")
 }
 
 class ComposeCommandLineProcessor : CommandLineProcessor {
@@ -78,13 +76,6 @@ class ComposeCommandLineProcessor : CommandLineProcessor {
             required = false,
             allowMultipleOccurrences = false
         )
-        val DECOYS_ENABLED_OPTION = CliOption(
-            "generateDecoys",
-            "<true|false>",
-            "Generate decoy methods in IR transform",
-            required = false,
-            allowMultipleOccurrences = false
-        )
     }
 
     override val pluginId = PLUGIN_ID
@@ -92,39 +83,31 @@ class ComposeCommandLineProcessor : CommandLineProcessor {
         LIVE_LITERALS_ENABLED_OPTION,
         SOURCE_INFORMATION_ENABLED_OPTION,
         INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_OPTION,
-        SUPPRESS_KOTLIN_VERSION_CHECK_ENABLED_OPTION,
-        DECOYS_ENABLED_OPTION,
+        SUPPRESS_KOTLIN_VERSION_CHECK_ENABLED_OPTION
     )
 
     override fun processOption(
         option: AbstractCliOption,
         value: String,
         configuration: CompilerConfiguration
-    ) {
-//        throw IllegalStateException("arstarst")
-        return when (option) {
-            LIVE_LITERALS_ENABLED_OPTION -> configuration.put(
-                ComposeConfiguration.LIVE_LITERALS_ENABLED_KEY,
-                value == "true"
-            )
-            SOURCE_INFORMATION_ENABLED_OPTION -> configuration.put(
-                ComposeConfiguration.SOURCE_INFORMATION_ENABLED_KEY,
-                value == "true"
-            )
-            INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_OPTION -> configuration.put(
-                ComposeConfiguration.INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_KEY,
-                value == "true"
-            )
-            SUPPRESS_KOTLIN_VERSION_CHECK_ENABLED_OPTION -> configuration.put(
-                ComposeConfiguration.SUPPRESS_KOTLIN_VERSION_COMPATIBILITY_CHECK,
-                value == "true"
-            )
-            DECOYS_ENABLED_OPTION -> configuration.put(
-                ComposeConfiguration.DECOYS_ENABLED_KEY,
-                value == "true"
-            )
-            else -> throw CliOptionProcessingException("Unknown option: ${option.optionName}")
-        }
+    ) = when (option) {
+        LIVE_LITERALS_ENABLED_OPTION -> configuration.put(
+            ComposeConfiguration.LIVE_LITERALS_ENABLED_KEY,
+            value == "true"
+        )
+        SOURCE_INFORMATION_ENABLED_OPTION -> configuration.put(
+            ComposeConfiguration.SOURCE_INFORMATION_ENABLED_KEY,
+            value == "true"
+        )
+        INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_OPTION -> configuration.put(
+            ComposeConfiguration.INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_KEY,
+            value == "true"
+        )
+        SUPPRESS_KOTLIN_VERSION_CHECK_ENABLED_OPTION -> configuration.put(
+            ComposeConfiguration.SUPPRESS_KOTLIN_VERSION_COMPATIBILITY_CHECK,
+            value == "true"
+        )
+        else -> throw CliOptionProcessingException("Unknown option: ${option.optionName}")
     }
 }
 
@@ -150,7 +133,7 @@ class ComposeComponentRegistrar : ComponentRegistrar {
             KotlinCompilerVersion.getVersion()?.let { version ->
                 val suppressKotlinVersionCheck = configuration.get(
                     ComposeConfiguration.SUPPRESS_KOTLIN_VERSION_COMPATIBILITY_CHECK,
-                    true
+                    false
                 )
                 if (!suppressKotlinVersionCheck && version != KOTLIN_VERSION_EXPECTATION) {
                     val msgCollector = configuration.get(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY)
@@ -183,11 +166,6 @@ class ComposeComponentRegistrar : ComponentRegistrar {
                 ComposeConfiguration.INTRINSIC_REMEMBER_OPTIMIZATION_ENABLED_KEY,
                 false
             )
-            val decoysEnabled = configuration.get(
-                ComposeConfiguration.DECOYS_ENABLED_KEY,
-                true
-            )
-
             StorageComponentContainerContributor.registerExtension(
                 project,
                 ComposableCallChecker()
@@ -210,8 +188,7 @@ class ComposeComponentRegistrar : ComponentRegistrar {
                 ComposeIrGenerationExtension(
                     liveLiteralsEnabled = liveLiteralsEnabled,
                     sourceInformationEnabled = sourceInformationEnabled,
-                    intrinsicRememberEnabled = intrinsicRememberEnabled,
-                    decoysEnabled = decoysEnabled,
+                    intrinsicRememberEnabled = intrinsicRememberEnabled
                 )
             )
             DescriptorSerializerPlugin.registerExtension(

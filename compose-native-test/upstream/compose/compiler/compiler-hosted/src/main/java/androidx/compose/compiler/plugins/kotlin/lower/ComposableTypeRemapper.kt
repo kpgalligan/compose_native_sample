@@ -17,10 +17,8 @@
 package androidx.compose.compiler.plugins.kotlin.lower
 
 import androidx.compose.compiler.plugins.kotlin.ComposeFqNames
-import androidx.compose.compiler.plugins.kotlin.lower.decoys.isDecoy
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContextImpl
-import org.jetbrains.kotlin.backend.common.peek
 import org.jetbrains.kotlin.backend.common.pop
 import org.jetbrains.kotlin.builtins.isFunctionType
 import org.jetbrains.kotlin.descriptors.ClassDescriptor
@@ -39,13 +37,14 @@ import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 import org.jetbrains.kotlin.ir.declarations.IrTypeParametersContainer
 import org.jetbrains.kotlin.ir.declarations.copyAttributes
+import org.jetbrains.kotlin.ir.declarations.impl.IrClassImpl
+import org.jetbrains.kotlin.ir.declarations.impl.IrFieldImpl
 import org.jetbrains.kotlin.ir.declarations.impl.IrFileImpl
+import org.jetbrains.kotlin.ir.declarations.impl.IrPropertyImpl
 import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.expressions.IrConst
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrMemberAccessExpression
 import org.jetbrains.kotlin.ir.expressions.impl.IrCallImpl
-import org.jetbrains.kotlin.ir.expressions.impl.IrConstImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrConstructorCallImpl
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrSimpleType
@@ -86,17 +85,11 @@ class DeepCopyIrTreeWithSymbolsPreservingMetadata(
     }
 
     override fun visitFunction(declaration: IrFunction): IrStatement {
-        return super.visitFunction(declaration).also {
-            it.copyMetadataFrom(declaration)
-        }
+        return super.visitFunction(declaration).also { it.copyMetadataFrom(declaration) }
     }
 
     override fun visitConstructor(declaration: IrConstructor): IrConstructor {
-        return super.visitConstructor(declaration).also {
-            WrappedComposableDescriptorPatcher.visitConstructor(it)
-
-            it.copyMetadataFrom(declaration)
-        }
+        return super.visitConstructor(declaration).also { it.copyMetadataFrom(declaration) }
     }
 
     override fun visitSimpleFunction(declaration: IrSimpleFunction): IrSimpleFunction {
@@ -107,8 +100,6 @@ class DeepCopyIrTreeWithSymbolsPreservingMetadata(
             symbolRemapper.visitSimpleFunction(declaration)
         }
         return super.visitSimpleFunction(declaration).also {
-            WrappedComposableDescriptorPatcher.visitSimpleFunction(it)
-
             it.correspondingPropertySymbol = declaration.correspondingPropertySymbol
             it.copyMetadataFrom(declaration)
         }
@@ -116,7 +107,7 @@ class DeepCopyIrTreeWithSymbolsPreservingMetadata(
 
     override fun visitField(declaration: IrField): IrField {
         return super.visitField(declaration).also {
-            it.metadata = declaration.metadata
+            (it as IrFieldImpl).metadata = declaration.metadata
         }
     }
 
@@ -243,7 +234,7 @@ class DeepCopyIrTreeWithSymbolsPreservingMetadata(
             if (ownerFn.correspondingPropertySymbol != null) {
                 val property = ownerFn.correspondingPropertySymbol!!.owner
                 symbolRemapper.visitProperty(property)
-                visitProperty(property).also {
+                super.visitProperty(property).also {
                     it.getter?.correspondingPropertySymbol = it.symbol
                     it.setter?.correspondingPropertySymbol = it.symbol
                     it.parent = ownerFn.parent
@@ -252,9 +243,9 @@ class DeepCopyIrTreeWithSymbolsPreservingMetadata(
                 }
             } else {
                 symbolRemapper.visitSimpleFunction(ownerFn)
-                visitSimpleFunction(ownerFn).also {
+                super.visitSimpleFunction(ownerFn).also {
                     it.parent = ownerFn.parent
-                    it.correspondingPropertySymbol = null
+                    it.correspondingPropertySymbol = ownerFn.correspondingPropertySymbol
                     it.patchDeclarationParents(it.parent)
                 }
             }
@@ -291,16 +282,6 @@ class DeepCopyIrTreeWithSymbolsPreservingMetadata(
 
         return super.visitCall(expression)
     }
-
-    override fun <T> visitConst(expression: IrConst<T>): IrConst<T> =
-        // unlike the original visitConst, this one remaps type as well
-        IrConstImpl(
-            expression.startOffset,
-            expression.endOffset,
-            expression.type.remapType(),
-            expression.kind,
-            expression.value
-        ).copyAttributes(expression)
 
     private fun IrSimpleFunctionSymbol.isBoundButNotRemapped(): Boolean {
         return this.isBound && symbolRemapper.getReferencedFunction(this) == this
@@ -354,10 +335,11 @@ class DeepCopyIrTreeWithSymbolsPreservingMetadata(
         }
 
     private fun IrElement.copyMetadataFrom(owner: IrMetadataSourceOwner) {
-        if (this is IrMetadataSourceOwner) {
-            metadata = owner.metadata
-        } else {
-            throw IllegalArgumentException("Cannot copy metadata to $this")
+        when (this) {
+            is IrPropertyImpl -> metadata = owner.metadata
+            is IrFunction -> metadata = owner.metadata
+            is IrClassImpl -> metadata = owner.metadata
+            else -> throw Error("Unknown type: $this")
         }
     }
 
@@ -414,11 +396,6 @@ class ComposerTypeRemapper(
         if (type !is IrSimpleType) return type
         if (!type.isFunction()) return underlyingRemapType(type)
         if (!type.isComposable()) return underlyingRemapType(type)
-        // do not convert types for decoys
-        if (scopeStack.peek()?.isDecoy() == true) {
-            return underlyingRemapType(type)
-        }
-
         val oldIrArguments = type.arguments
         val realParams = oldIrArguments.size - 1
         var extraArgs = listOf(

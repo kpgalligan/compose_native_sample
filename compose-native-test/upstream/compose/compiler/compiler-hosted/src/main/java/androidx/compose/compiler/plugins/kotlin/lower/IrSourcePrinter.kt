@@ -248,7 +248,6 @@ private class IrSourcePrinterVisitor(
     }
 
     override fun visitConstructor(declaration: IrConstructor) {
-        declaration.printAnnotations(onePerLine = true)
         print("constructor")
         val parameters = declaration.valueParameters
         if (parameters.isNotEmpty()) {
@@ -265,8 +264,9 @@ private class IrSourcePrinterVisitor(
     override fun visitCall(expression: IrCall) {
         val function = expression.symbol.owner
         val name = function.name.asString()
-        val isOperator = function.isOperator || function.origin == IrBuiltIns.BUILTIN_OPERATOR
-        val isInfix = function.isInfix
+        val descriptor = function.descriptor
+        val isOperator = descriptor.isOperator || function.origin == IrBuiltIns.BUILTIN_OPERATOR
+        val isInfix = descriptor.isInfix
         if (isOperator) {
             if (name == "not") {
                 // IR tree for `a !== b` looks like `not(equals(a, b))` which makes
@@ -315,7 +315,6 @@ private class IrSourcePrinterVisitor(
                 "greaterOrEqual" -> ">="
                 "EQEQ" -> if (isInNotCall) "!=" else "=="
                 "EQEQEQ" -> if (isInNotCall) "!==" else "==="
-                "OROR" -> "||"
                 // no names for
                 "invoke", "get", "set" -> ""
                 "iterator", "hasNext", "next", "getValue", "setValue" -> name
@@ -541,7 +540,7 @@ private class IrSourcePrinterVisitor(
             body?.print()
         }
         println()
-        print("}")
+        println("}")
     }
 
     override fun visitTypeOperator(expression: IrTypeOperatorCall) {
@@ -552,7 +551,7 @@ private class IrSourcePrinterVisitor(
             IrTypeOperator.NOT_INSTANCEOF -> {
                 expression.argument.print()
             }
-            IrTypeOperator.CAST, IrTypeOperator.IMPLICIT_CAST -> {
+            IrTypeOperator.CAST -> {
                 expression.argument.print()
             }
             IrTypeOperator.SAM_CONVERSION -> {
@@ -892,7 +891,6 @@ private class IrSourcePrinterVisitor(
     }
 
     override fun visitProperty(declaration: IrProperty) {
-        declaration.printAnnotations(onePerLine = true)
         if (declaration.isLateinit) {
             print("lateinit")
         }
@@ -917,8 +915,6 @@ private class IrSourcePrinterVisitor(
             declaration.getter?.let {
                 if (it.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR) {
                     println()
-                    it.printAnnotations()
-                    println()
                     println("get() {")
                     indented {
                         it.body?.accept(this, null)
@@ -930,7 +926,6 @@ private class IrSourcePrinterVisitor(
             declaration.setter?.let {
                 if (it.origin != IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR) {
                     println()
-                    it.printAnnotations()
                     println("set(value) {")
                     indented {
                         it.body?.accept(this, null)
@@ -1152,16 +1147,8 @@ private class IrSourcePrinterVisitor(
         print("<<CONTAINEREXPR>>")
     }
 
-    @OptIn(ObsoleteDescriptorBasedAPI::class)
     override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall) {
-        val constructedClass = expression.symbol.descriptor.constructedClass
-        val name = constructedClass.name
-
-        print("ctor<")
-        print(name)
-        print(">")
-
-        expression.printArgumentList()
+        print("<<DELEGATINGCTORCALL>>")
     }
 
     override fun visitElseBranch(branch: IrElseBranch) {
@@ -1173,44 +1160,11 @@ private class IrSourcePrinterVisitor(
     }
 
     override fun visitFunctionReference(expression: IrFunctionReference) {
-        val function = expression.symbol.owner
-        val dispatchReceiver = expression.dispatchReceiver
-        val extensionReceiver = expression.extensionReceiver
-        val dispatchIsSpecial = dispatchReceiver.let {
-            it is IrGetValue && it.symbol.owner.name.isSpecial
-        }
-        val extensionIsSpecial = extensionReceiver.let {
-            it is IrGetValue && it.symbol.owner.name.isSpecial
-        }
-
-        if (dispatchReceiver != null && !dispatchIsSpecial) {
-            dispatchReceiver.print()
-            print("::")
-        } else if (extensionReceiver != null && !extensionIsSpecial) {
-            extensionReceiver.print()
-            print("::")
-        }
-
-        val prop = (function as? IrSimpleFunction)?.correspondingPropertySymbol?.owner
-
-        if (prop != null) {
-            val propName = prop.name.asString()
-            print(propName)
-            if (function == prop.setter) {
-                print("::set")
-            } else if (function == prop.getter) {
-                print("::get")
-            }
-        } else {
-            print(function.name.asString())
-        }
+        print("<<FUNCTIONREF>>")
     }
 
     override fun visitInstanceInitializerCall(expression: IrInstanceInitializerCall) {
-        val constructedClass = expression.classSymbol.owner
-        val name = constructedClass.name
-
-        print("init<$name>()")
+        print("<<INSTINIT>>")
     }
 
     override fun visitLocalDelegatedProperty(declaration: IrLocalDelegatedProperty) {

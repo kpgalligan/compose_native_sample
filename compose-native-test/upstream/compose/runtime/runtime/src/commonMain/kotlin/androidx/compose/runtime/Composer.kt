@@ -22,7 +22,6 @@ package androidx.compose.runtime
 
 import androidx.compose.runtime.collection.IdentityScopeMap
 import androidx.compose.runtime.snapshots.fastForEach
-import androidx.compose.runtime.snapshots.fastMap
 import androidx.compose.runtime.snapshots.fastToSet
 import androidx.compose.runtime.tooling.LocalInspectionTables
 import androidx.compose.runtime.tooling.CompositionData
@@ -1253,7 +1252,7 @@ internal class ComposerImpl(
 
     private fun validateRecomposeScopeAnchors(slotTable: SlotTable) {
         val scopes = slotTable.slots.mapNotNull { it as? RecomposeScopeImpl }
-        scopes.fastForEach { scope ->
+        for (scope in scopes) {
             scope.anchor?.let { anchor ->
                 check(scope in slotTable.slotsOf(anchor.toIndexFor(slotTable))) {
                     val dataIndex = slotTable.slots.indexOf(scope)
@@ -1352,7 +1351,7 @@ internal class ComposerImpl(
 
         fun dispatchSideEffects() {
             if (sideEffects.isNotEmpty()) {
-                sideEffects.fastForEach { sideEffect ->
+                for (sideEffect in sideEffects) {
                     sideEffect()
                 }
                 sideEffects.clear()
@@ -1377,7 +1376,7 @@ internal class ComposerImpl(
     internal fun applyChanges() {
         trace("Compose:applyChanges") {
             val invalidationAnchors = slotTable.read { reader ->
-                invalidations.fastMap { reader.anchor(it.location) to it }
+                invalidations.map { reader.anchor(it.location) to it }
             }
 
             val manager = RememberEventDispatcher(abandonSet)

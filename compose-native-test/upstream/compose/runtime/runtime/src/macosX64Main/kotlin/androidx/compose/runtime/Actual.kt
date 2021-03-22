@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The Android Open Source Project
+ * Copyright 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,16 +24,6 @@ internal actual open class ThreadLocal<T> actual constructor(
     actual fun get(): T = value
 
     actual fun set(value: T) {
-        this.value = value
-    }
-}
-
-internal actual open class SnapshotThreadLocal<T> {
-    private var value: T? = null
-
-    actual fun get(): T? = value
-
-    actual fun set(value: T?) {
         this.value = value
     }
 }
@@ -83,14 +73,3 @@ object DefaultChoreographerFrameClock : MonotonicFrameClock {
         TODO()
     }
 }
-
-internal actual object Trace {
-    actual fun beginSection(name: String): Any? {
-        return null
-    }
-
-    actual fun endSection(token: Any?) {
-    }
-}
-
-actual annotation class CheckResult actual constructor(actual val suggest: String)
